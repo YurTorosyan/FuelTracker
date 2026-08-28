@@ -1,0 +1,16 @@
+{
+  "name": "FuelTrack",
+  "short_name": "FuelTrack",
+  "icons": [
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "150x150",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a"
+}
