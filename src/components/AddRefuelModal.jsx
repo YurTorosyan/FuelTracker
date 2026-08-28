@@ -3,17 +3,26 @@ import { X, Plus, Fuel } from 'lucide-react';
 import { collection, addDoc, Timestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import { calcLiters } from '../utils/calculations';
+import { parseInputDate } from '../utils/dateUtils';
 
-const AddRefuelModal = ({ user, stations, defaultDate, onClose, onOpenStationManager }) => {
+const AddRefuelModal = ({ user, stations, defaultDate, onClose, onOpenStationManager, showToast }) => {
   const [fuelType, setFuelType] = useState('propane');
   const [station, setStation] = useState('');
   const [isTankEmpty, setIsTankEmpty] = useState(false);
   const [mileage, setMileage] = useState('');
   const [sum, setSum] = useState('');
   const [pricePerLiter, setPricePerLiter] = useState('');
-  // Теперь дата хранится в виде строки YYYY-MM-DD
   const [date, setDate] = useState(defaultDate || '');
   const [notification, setNotification] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Блокировка скролла заднего фона
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, []);
 
   useEffect(() => {
     if (stations.length > 0 && !station) {
@@ -21,22 +30,26 @@ const AddRefuelModal = ({ user, stations, defaultDate, onClose, onOpenStationMan
     }
   }, [stations]);
 
+  const isFormValid = () => {
+    if (!date || !sum || parseFloat(sum) <= 0) return false;
+    if (fuelType === 'propane') {
+      if (!station) return false;
+      if (!pricePerLiter || parseFloat(pricePerLiter) <= 0) return false;
+      if (isTankEmpty && (!mileage || parseFloat(mileage) <= 0)) return false;
+    }
+    return true;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!sum) return;
-
-    const sumNum = parseFloat(sum);
-    if (isNaN(sumNum)) return;
-
-    // Проверяем, что дата задана
-    if (!date) {
-      alert('Выберите дату');
+    if (!isFormValid()) {
+      showToast('Заполните все обязательные поля корректно', 'error');
       return;
     }
 
-    // Преобразуем строку YYYY-MM-DD в объект Date с локальным временем начала дня
-    const [year, month, day] = date.split('-').map(Number);
-    const dateObj = new Date(year, month - 1, day); // локальное время 00:00
+    setIsSubmitting(true);
+    const sumNum = parseFloat(sum);
+    const dateObj = parseInputDate(date);
 
     try {
       const record = {
@@ -46,27 +59,13 @@ const AddRefuelModal = ({ user, stations, defaultDate, onClose, onOpenStationMan
       };
 
       if (fuelType === 'propane') {
-        if (!station) {
-          alert('Выберите АЗС');
-          return;
-        }
-        if (!pricePerLiter) {
-          alert('Введите цену за литр');
-          return;
-        }
         const priceNum = parseFloat(pricePerLiter);
-        if (isNaN(priceNum) || priceNum <= 0) return;
-
         const liters = calcLiters(sumNum, priceNum);
         record.station = station;
         record.pricePerLiter = priceNum;
         record.liters = liters;
         record.isTankEmpty = isTankEmpty;
         if (isTankEmpty) {
-          if (!mileage || parseFloat(mileage) <= 0) {
-            alert('Введите пробег');
-            return;
-          }
           record.mileage = parseFloat(mileage);
         }
       }
@@ -78,14 +77,22 @@ const AddRefuelModal = ({ user, stations, defaultDate, onClose, onOpenStationMan
       }, 1500);
     } catch (error) {
       console.error('Ошибка добавления записи:', error);
-      alert('Не удалось сохранить заправку. Проверьте консоль.');
+      showToast('Не удалось сохранить заправку', 'error');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50">
-      <div className="bg-slate-800 rounded-2xl p-6 w-full max-w-sm shadow-2xl relative">
-        <button onClick={onClose} className="absolute top-3 right-3 p-1 rounded-full hover:bg-slate-700">
+    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4">
+      <div className="w-full max-w-md rounded-t-3xl sm:rounded-2xl bg-slate-800 border-t sm:border border-slate-700/80 p-5 shadow-2xl max-h-[90vh] overflow-y-auto overflow-x-hidden overscroll-contain animate-in slide-in-from-bottom duration-200 relative">
+        {/* Полоска-индикатор (handle bar) */}
+        <div className="w-12 h-1.5 bg-slate-600 rounded-full mx-auto mb-4 opacity-60" />
+
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 p-1 rounded-full hover:bg-slate-700 active:scale-90 transition-all"
+        >
           <X size={20} className="text-slate-300" />
         </button>
 
@@ -94,27 +101,30 @@ const AddRefuelModal = ({ user, stations, defaultDate, onClose, onOpenStationMan
         <div className="flex gap-2 mb-4">
           <button
             onClick={() => setFuelType('propane')}
-            className={`flex-1 py-2 rounded-xl text-sm font-medium ${fuelType === 'propane' ? 'bg-emerald-500 text-white' : 'bg-slate-700 text-slate-300'}`}
+            className={`flex-1 py-2 rounded-xl text-sm font-medium transition-all active:scale-95 ${
+              fuelType === 'propane' ? 'bg-emerald-500 text-white' : 'bg-slate-700 text-slate-300'
+            }`}
           >
             Пропан
           </button>
           <button
             onClick={() => setFuelType('petrol')}
-            className={`flex-1 py-2 rounded-xl text-sm font-medium ${fuelType === 'petrol' ? 'bg-blue-500 text-white' : 'bg-slate-700 text-slate-300'}`}
+            className={`flex-1 py-2 rounded-xl text-sm font-medium transition-all active:scale-95 ${
+              fuelType === 'petrol' ? 'bg-sky-500 text-white' : 'bg-slate-700 text-slate-300'
+            }`}
           >
             Бензин
           </button>
         </div>
 
         <form onSubmit={handleSubmit}>
-          {/* Поле даты */}
           <div className="mb-3">
             <label className="block text-sm text-slate-400 mb-1">Дата</label>
             <input
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="w-full bg-slate-700 text-slate-100 rounded-xl px-3 py-2 outline-none"
+              className="w-full bg-slate-700 text-slate-100 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500 transition-shadow"
               required
             />
           </div>
@@ -127,7 +137,7 @@ const AddRefuelModal = ({ user, stations, defaultDate, onClose, onOpenStationMan
                   <select
                     value={station}
                     onChange={(e) => setStation(e.target.value)}
-                    className="flex-1 bg-slate-700 text-slate-100 rounded-xl px-3 py-2 outline-none"
+                    className="flex-1 bg-slate-700 text-slate-100 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500"
                   >
                     {stations.map(s => (
                       <option key={s.id} value={s.name}>{s.name}</option>
@@ -136,7 +146,7 @@ const AddRefuelModal = ({ user, stations, defaultDate, onClose, onOpenStationMan
                   <button
                     type="button"
                     onClick={onOpenStationManager}
-                    className="bg-slate-700 text-slate-300 p-2 rounded-xl hover:bg-slate-600"
+                    className="bg-slate-700 text-slate-300 p-2 rounded-xl hover:bg-slate-600 active:scale-95 transition-all"
                     aria-label="Добавить АЗС"
                   >
                     <Plus size={20} />
@@ -156,16 +166,17 @@ const AddRefuelModal = ({ user, stations, defaultDate, onClose, onOpenStationMan
               </div>
 
               <div className="mb-3">
-                <label className="block text-sm text-slate-400 mb-1">
-                  Пробег с прошлым сброса (км)
-                </label>
+                <label className="block text-sm text-slate-400 mb-1">Пробег с прошлым сброса (км)</label>
                 <input
                   type="number"
                   value={mileage}
                   onChange={(e) => setMileage(e.target.value)}
                   disabled={!isTankEmpty}
                   placeholder={isTankEmpty ? "Например, 320" : "Только при пустом баке"}
-                  className={`w-full bg-slate-700 text-slate-100 rounded-xl px-3 py-2 outline-none ${!isTankEmpty ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  className={`w-full bg-slate-700 text-slate-100 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500 ${
+                    !isTankEmpty ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
+                  inputMode="decimal"
                 />
               </div>
             </>
@@ -181,7 +192,8 @@ const AddRefuelModal = ({ user, stations, defaultDate, onClose, onOpenStationMan
               onChange={(e) => setSum(e.target.value)}
               required
               placeholder="10000"
-              className="w-full bg-slate-700 text-slate-100 rounded-xl px-3 py-2 outline-none"
+              className="w-full bg-slate-700 text-slate-100 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500"
+              inputMode="decimal"
             />
           </div>
 
@@ -194,16 +206,20 @@ const AddRefuelModal = ({ user, stations, defaultDate, onClose, onOpenStationMan
                 onChange={(e) => setPricePerLiter(e.target.value)}
                 required
                 placeholder="290"
-                className="w-full bg-slate-700 text-slate-100 rounded-xl px-3 py-2 outline-none"
+                className="w-full bg-slate-700 text-slate-100 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500"
+                inputMode="decimal"
               />
             </div>
           )}
 
           <button
             type="submit"
-            className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-medium py-2 rounded-xl transition-colors"
+            disabled={!isFormValid() || isSubmitting}
+            className={`w-full bg-emerald-500 hover:bg-emerald-600 text-white font-medium py-2 rounded-xl transition-all active:scale-95 ${
+              !isFormValid() || isSubmitting ? 'opacity-50 cursor-not-allowed' : ''
+            }`}
           >
-            Сохранить
+            {isSubmitting ? 'Сохранение...' : 'Сохранить'}
           </button>
         </form>
 

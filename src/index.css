@@ -1,1 +1,30 @@
 @import "tailwindcss";
+
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.slide-up {
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.fade-in {
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 10px rgba(16,185,129,0.3); }
+  50% { box-shadow: 0 0 20px rgba(16,185,129,0.5); }
+}
+.pulse-glow {
+  animation: pulse-glow 2s infinite;
+}
+
+/* Скелетоны */
+.skeleton {
+  @apply animate-pulse bg-slate-700/50 rounded-xl;
+}

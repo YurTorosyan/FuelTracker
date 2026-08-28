@@ -3,45 +3,62 @@ import { X } from 'lucide-react';
 import { auth, googleProvider } from '../firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, signOut } from 'firebase/auth';
 
-const AuthModal = ({ onClose }) => {
+const AuthModal = ({ onClose, showToast }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isRegister, setIsRegister] = useState(false);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleEmailAuth = async (e) => {
     e.preventDefault();
     setError('');
+    setLoading(true);
     try {
       if (isRegister) {
         await createUserWithEmailAndPassword(auth, email, password);
+        showToast('Регистрация успешна', 'success');
       } else {
         await signInWithEmailAndPassword(auth, email, password);
+        showToast('Вход выполнен', 'success');
       }
       onClose();
     } catch (err) {
       setError(err.message);
+      showToast(err.message, 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleGoogleAuth = async () => {
+    setLoading(true);
     try {
       await signInWithPopup(auth, googleProvider);
+      showToast('Вход через Google выполнен', 'success');
       onClose();
     } catch (err) {
       setError(err.message);
+      showToast(err.message, 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleSignOut = async () => {
-    await signOut(auth);
-    onClose();
+    try {
+      await signOut(auth);
+      showToast('Вы вышли из системы', 'success');
+      onClose();
+    } catch (err) {
+      showToast('Ошибка выхода', 'error');
+    }
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50">
-      <div className="bg-slate-800 rounded-2xl p-6 w-full max-w-sm shadow-2xl relative">
-        <button onClick={onClose} className="absolute top-3 right-3 p-1 rounded-full hover:bg-slate-700">
+    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-end sm:items-center justify-center p-4 z-50">
+      <div className="bg-slate-800/95 backdrop-blur-md rounded-t-2xl sm:rounded-2xl p-6 w-full max-w-sm shadow-2xl relative slide-up">
+        <button onClick={onClose} className="absolute top-3 right-3 p-1 rounded-full hover:bg-slate-700 active:scale-90 transition-all">
           <X size={20} className="text-slate-300" />
         </button>
         <h2 className="text-xl font-bold text-slate-100 mb-4">
@@ -54,7 +71,7 @@ const AuthModal = ({ onClose }) => {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="Email"
-            className="w-full bg-slate-700 text-slate-100 rounded-xl px-3 py-2 outline-none"
+            className="w-full bg-slate-700 text-slate-100 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500"
             required
           />
           <input
@@ -62,17 +79,24 @@ const AuthModal = ({ onClose }) => {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Пароль"
-            className="w-full bg-slate-700 text-slate-100 rounded-xl px-3 py-2 outline-none"
+            className="w-full bg-slate-700 text-slate-100 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500"
             required
           />
-          <button type="submit" className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-2 rounded-xl">
-            {isRegister ? 'Зарегистрироваться' : 'Войти'}
+          <button
+            type="submit"
+            disabled={loading}
+            className={`w-full bg-emerald-500 hover:bg-emerald-600 text-white py-2 rounded-xl transition-all active:scale-95 ${
+              loading ? 'opacity-50 cursor-not-allowed' : ''
+            }`}
+          >
+            {loading ? 'Обработка...' : isRegister ? 'Зарегистрироваться' : 'Войти'}
           </button>
         </form>
 
         <button
           onClick={handleGoogleAuth}
-          className="w-full mt-3 bg-white hover:bg-gray-200 text-gray-800 py-2 rounded-xl flex items-center justify-center gap-2"
+          disabled={loading}
+          className="w-full mt-3 bg-white hover:bg-gray-200 text-gray-800 py-2 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50"
         >
           <svg className="w-5 h-5" viewBox="0 0 24 24">
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -85,13 +109,13 @@ const AuthModal = ({ onClose }) => {
 
         <button
           onClick={() => setIsRegister(!isRegister)}
-          className="w-full mt-2 text-sm text-slate-400 hover:text-slate-300"
+          className="w-full mt-2 text-sm text-slate-400 hover:text-slate-300 transition-colors"
         >
           {isRegister ? 'Уже есть аккаунт? Войти' : 'Нет аккаунта? Зарегистрироваться'}
         </button>
 
         {auth.currentUser && (
-          <button onClick={handleSignOut} className="w-full mt-2 text-red-400 hover:text-red-300 text-sm">
+          <button onClick={handleSignOut} className="w-full mt-2 text-red-400 hover:text-red-300 text-sm transition-colors">
             Выйти
           </button>
         )}

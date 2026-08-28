@@ -1,11 +1,21 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { X, Trash2, Award, TrendingDown, TrendingUp, Fuel } from 'lucide-react';
 import { db, auth } from '../firebase';
 import { deleteDoc, doc } from 'firebase/firestore';
 import { computeStationStats } from '../utils/calculations';
+import { AnalyticsSkeleton } from './Skeletons';
 
-const AnalyticsModal = ({ records, onClose, onDeleteRecord }) => {
+const AnalyticsModal = ({ records, onClose, onDeleteRecord, showToast }) => {
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Блокировка скролла заднего фона
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, []);
 
   const propaneRecords = records.filter(r => r.type === 'propane');
   const petrolRecords = records.filter(r => r.type === 'petrol');
@@ -28,7 +38,6 @@ const AnalyticsModal = ({ records, onClose, onDeleteRecord }) => {
     return totalDays / (sorted.length - 1);
   }, [records]);
 
-  // Используем новую функцию для статистики по АЗС
   const stationStats = useMemo(() => computeStationStats(records), [records]);
 
   const bestStation = stationStats
@@ -41,11 +50,16 @@ const AnalyticsModal = ({ records, onClose, onDeleteRecord }) => {
   const handleDelete = async (id) => {
     if (deleteConfirm === id) {
       try {
+        setIsLoading(true);
         await deleteDoc(doc(db, 'users', auth.currentUser.uid, 'logs', id));
         setDeleteConfirm(null);
         if (onDeleteRecord) onDeleteRecord(id);
+        showToast('Запись удалена', 'success');
       } catch (error) {
         console.error('Ошибка удаления:', error);
+        showToast('Не удалось удалить запись', 'error');
+      } finally {
+        setIsLoading(false);
       }
     } else {
       setDeleteConfirm(id);
@@ -58,10 +72,23 @@ const AnalyticsModal = ({ records, onClose, onDeleteRecord }) => {
     return date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
   };
 
+  if (isLoading) {
+    return (
+      <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4">
+        <div className="w-full max-w-md rounded-t-3xl sm:rounded-2xl bg-slate-800 border-t sm:border border-slate-700/80 p-5 shadow-2xl max-h-[90vh] overflow-y-auto animate-in slide-in-from-bottom duration-200">
+          <AnalyticsSkeleton />
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50 overflow-y-auto">
-      <div className="bg-slate-900 rounded-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl relative">
-        <button onClick={onClose} className="absolute top-3 right-3 p-1 rounded-full hover:bg-slate-800">
+    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4">
+      <div className="w-full max-w-md rounded-t-3xl sm:rounded-2xl bg-slate-800 border-t sm:border border-slate-700/80 p-5 shadow-2xl max-h-[90vh] overflow-y-auto animate-in slide-in-from-bottom duration-200 relative">
+        {/* Полоска-индикатор */}
+        <div className="w-12 h-1.5 bg-slate-600 rounded-full mx-auto mb-4 opacity-60" />
+
+        <button onClick={onClose} className="absolute top-4 right-4 p-1 rounded-full hover:bg-slate-700 active:scale-90 transition-all">
           <X size={20} className="text-slate-300" />
         </button>
 
@@ -69,131 +96,146 @@ const AnalyticsModal = ({ records, onClose, onDeleteRecord }) => {
           <Fuel className="text-emerald-400" /> Аналитика расходов
         </h2>
 
-        {/* Финансовое соотношение */}
-        <section className="mb-6">
-          <h3 className="text-lg font-semibold text-slate-200 mb-2">Соотношение трат</h3>
-          <div className="bg-slate-800 rounded-xl p-4">
-            <div className="flex justify-between mb-1">
-              <span className="text-sm text-slate-400">Пропан</span>
-              <span className="text-sm text-emerald-400">{totalPropane.toLocaleString('ru-RU')} ֏ ({propanePercent.toFixed(1)}%)</span>
-            </div>
-            <div className="w-full bg-slate-700 rounded-full h-2 mb-3">
-              <div className="bg-emerald-400 h-2 rounded-full" style={{ width: `${propanePercent}%` }}></div>
-            </div>
-            <div className="flex justify-between mb-1">
-              <span className="text-sm text-slate-400">Бензин</span>
-              <span className="text-sm text-blue-400">{totalPetrol.toLocaleString('ru-RU')} ֏ ({petrolPercent.toFixed(1)}%)</span>
-            </div>
-            <div className="w-full bg-slate-700 rounded-full h-2">
-              <div className="bg-blue-400 h-2 rounded-full" style={{ width: `${petrolPercent}%` }}></div>
-            </div>
+        {records.length === 0 ? (
+          <div className="text-center py-12 text-slate-400">
+            <p>Нет данных для анализа</p>
+            <p className="text-sm mt-2">Добавьте заправки, чтобы увидеть статистику</p>
           </div>
-        </section>
-
-        {/* Средние показатели */}
-        <section className="mb-6 grid grid-cols-2 gap-3">
-          <div className="bg-slate-800 rounded-xl p-3">
-            <div className="text-sm text-slate-400">Средний чек</div>
-            <div className="text-lg font-bold text-slate-100">{avgReceipt.toFixed(0)} ֏</div>
-          </div>
-          <div className="bg-slate-800 rounded-xl p-3">
-            <div className="text-sm text-slate-400">Ср. дней между заправками</div>
-            <div className="text-lg font-bold text-slate-100">{daysBetween.toFixed(1)} дн.</div>
-          </div>
-        </section>
-
-        {/* Лучшая и худшая АЗС */}
-        <section className="mb-6">
-          <h3 className="text-lg font-semibold text-slate-200 mb-2">Анализ АЗС (Газ)</h3>
-          {bestStation && (
-            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3 mb-3 flex items-center gap-3">
-              <Award className="text-emerald-400" size={24} />
-              <div>
-                <div className="font-medium text-emerald-300">Лучшая АЗС: {bestStation.name}</div>
-                <div className="text-sm text-emerald-200">
-                  Расход {bestStation.avgConsumption.toFixed(2)} л/100км, {bestStation.avgCostPerKm.toFixed(2)} ֏/км
+        ) : (
+          <>
+            {/* Финансовое соотношение */}
+            <section className="mb-6">
+              <h3 className="text-lg font-semibold text-slate-200 mb-2">Соотношение трат</h3>
+              <div className="bg-slate-800/80 rounded-xl p-4 border border-white/10">
+                <div className="flex justify-between mb-1">
+                  <span className="text-sm text-slate-400">Пропан</span>
+                  <span className="text-sm text-emerald-400">{totalPropane.toLocaleString('ru-RU')} ֏ ({propanePercent.toFixed(1)}%)</span>
+                </div>
+                <div className="w-full bg-slate-700 rounded-full h-2 mb-3">
+                  <div className="bg-emerald-400 h-2 rounded-full" style={{ width: `${propanePercent}%` }}></div>
+                </div>
+                <div className="flex justify-between mb-1">
+                  <span className="text-sm text-slate-400">Бензин</span>
+                  <span className="text-sm text-sky-400">{totalPetrol.toLocaleString('ru-RU')} ֏ ({petrolPercent.toFixed(1)}%)</span>
+                </div>
+                <div className="w-full bg-slate-700 rounded-full h-2">
+                  <div className="bg-sky-400 h-2 rounded-full" style={{ width: `${petrolPercent}%` }}></div>
                 </div>
               </div>
-            </div>
-          )}
-          {worstStation && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 flex items-center gap-3">
-              <TrendingDown className="text-red-400" size={24} />
-              <div>
-                <div className="font-medium text-red-300">Худшая АЗС: {worstStation.name}</div>
-                <div className="text-sm text-red-200">
-                  Расход {worstStation.avgConsumption.toFixed(2)} л/100км, {worstStation.avgCostPerKm.toFixed(2)} ֏/км
-                </div>
+            </section>
+
+            {/* Средние показатели */}
+            <section className="mb-6 grid grid-cols-2 gap-3">
+              <div className="bg-slate-800/80 rounded-xl p-3 border border-white/10">
+                <div className="text-sm text-slate-400">Средний чек</div>
+                <div className="text-lg font-bold text-slate-100">{avgReceipt.toFixed(0)} ֏</div>
               </div>
-            </div>
-          )}
-        </section>
+              <div className="bg-slate-800/80 rounded-xl p-3 border border-white/10">
+                <div className="text-sm text-slate-400">Ср. дней между заправками</div>
+                <div className="text-lg font-bold text-slate-100">{daysBetween.toFixed(1)} дн.</div>
+              </div>
+            </section>
 
-        {/* Таблица по АЗС */}
-        {stationStats.length > 0 && (
-          <section className="mb-6">
-            <h3 className="text-lg font-semibold text-slate-200 mb-2">Все АЗС</h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-slate-400 border-b border-slate-700">
-                    <th className="text-left py-2">АЗС</th>
-                    <th className="text-right">Расход</th>
-                    <th className="text-right">1 км</th>
-                    <th className="text-right">Литры</th>
-                    <th className="text-right">Сумма</th>
-                    <th className="text-right">Визиты</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {stationStats.map(s => (
-                    <tr key={s.name} className="border-b border-slate-800">
-                      <td className="py-2 text-slate-300">{s.name}</td>
-                      <td className="text-right text-slate-300">{s.avgConsumption ? s.avgConsumption.toFixed(2) : '—'}</td>
-                      <td className="text-right text-slate-300">{s.avgCostPerKm ? s.avgCostPerKm.toFixed(2) : '—'}</td>
-                      <td className="text-right text-slate-300">{s.totalLiters.toFixed(1)}</td>
-                      <td className="text-right text-slate-300">{s.totalSum.toLocaleString('ru-RU')}</td>
-                      <td className="text-right text-slate-300">{s.visits}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        )}
-
-        {/* Полный лог заправок */}
-        <section>
-          <h3 className="text-lg font-semibold text-slate-200 mb-2">Все заправки</h3>
-          <div className="space-y-2">
-            {records
-              .slice()
-              .sort((a, b) => b.date.seconds - a.date.seconds)
-              .map(record => (
-                <div key={record.id} className="bg-slate-800 rounded-xl p-3 flex items-center gap-3">
-                  <div className={`w-3 h-3 rounded-full ${record.type === 'propane' ? 'bg-emerald-400' : 'bg-blue-400'}`}></div>
-                  <div className="flex-1">
-                    <div className="text-sm text-slate-200">
-                      {formatDate(record.date)} — {record.type === 'propane' ? 'Пропан' : 'Бензин'}
-                      {record.station && ` (${record.station})`}
-                    </div>
-                    <div className="text-xs text-slate-400">
-                      {record.sum.toLocaleString('ru-RU')} ֏
-                      {record.liters ? `, ${record.liters.toFixed(1)} л` : ''}
-                      {record.mileage ? `, ${record.mileage} км` : ''}
+            {/* Лучшая и худшая АЗС */}
+            <section className="mb-6">
+              <h3 className="text-lg font-semibold text-slate-200 mb-2">Анализ АЗС (Газ)</h3>
+              {bestStation ? (
+                <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3 mb-3 flex items-center gap-3">
+                  <Award className="text-emerald-400" size={24} />
+                  <div>
+                    <div className="font-medium text-emerald-300">Лучшая АЗС: {bestStation.name}</div>
+                    <div className="text-sm text-emerald-200">
+                      Расход {bestStation.avgConsumption.toFixed(2)} л/100км, {bestStation.avgCostPerKm.toFixed(2)} ֏/км
                     </div>
                   </div>
-                  <button
-                    onClick={() => handleDelete(record.id)}
-                    className={`p-1 rounded-full hover:bg-slate-700 ${deleteConfirm === record.id ? 'text-red-400' : 'text-slate-400'}`}
-                    title={deleteConfirm === record.id ? 'Нажмите ещё раз для подтверждения' : 'Удалить'}
-                  >
-                    <Trash2 size={16} />
-                  </button>
                 </div>
-              ))}
-          </div>
-        </section>
+              ) : (
+                <p className="text-sm text-slate-400 mb-3">Пока недостаточно данных для определения лучшей АЗС</p>
+              )}
+              {worstStation && (
+                <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 flex items-center gap-3">
+                  <TrendingDown className="text-red-400" size={24} />
+                  <div>
+                    <div className="font-medium text-red-300">Худшая АЗС: {worstStation.name}</div>
+                    <div className="text-sm text-red-200">
+                      Расход {worstStation.avgConsumption.toFixed(2)} л/100км, {worstStation.avgCostPerKm.toFixed(2)} ֏/км
+                    </div>
+                  </div>
+                </div>
+              )}
+            </section>
+
+            {/* Таблица по АЗС */}
+            {stationStats.length > 0 ? (
+              <section className="mb-6">
+                <h3 className="text-lg font-semibold text-slate-200 mb-2">Все АЗС</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-slate-400 border-b border-slate-700">
+                        <th className="text-left py-2">АЗС</th>
+                        <th className="text-right">Расход</th>
+                        <th className="text-right">1 км</th>
+                        <th className="text-right">Литры</th>
+                        <th className="text-right">Сумма</th>
+                        <th className="text-right">Визиты</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {stationStats.map(s => (
+                        <tr key={s.name} className="border-b border-slate-800">
+                          <td className="py-2 text-slate-300">{s.name}</td>
+                          <td className="text-right text-slate-300">{s.avgConsumption ? s.avgConsumption.toFixed(2) : '—'}</td>
+                          <td className="text-right text-slate-300">{s.avgCostPerKm ? s.avgCostPerKm.toFixed(2) : '—'}</td>
+                          <td className="text-right text-slate-300">{s.totalLiters.toFixed(1)}</td>
+                          <td className="text-right text-slate-300">{s.totalSum.toLocaleString('ru-RU')}</td>
+                          <td className="text-right text-slate-300">{s.visits}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            ) : (
+              <p className="text-sm text-slate-400 mb-4">Нет данных по АЗС</p>
+            )}
+
+            {/* Полный лог заправок */}
+            <section>
+              <h3 className="text-lg font-semibold text-slate-200 mb-2">Все заправки</h3>
+              <div className="space-y-2">
+                {records
+                  .slice()
+                  .sort((a, b) => b.date.seconds - a.date.seconds)
+                  .map(record => (
+                    <div key={record.id} className="bg-slate-800/80 rounded-xl p-3 flex items-center gap-3 border border-white/10">
+                      <div className={`w-3 h-3 rounded-full ${record.type === 'propane' ? 'bg-emerald-400' : 'bg-sky-400'}`}></div>
+                      <div className="flex-1">
+                        <div className="text-sm text-slate-200">
+                          {formatDate(record.date)} — {record.type === 'propane' ? 'Пропан' : 'Бензин'}
+                          {record.station && ` (${record.station})`}
+                        </div>
+                        <div className="text-xs text-slate-400">
+                          {record.sum.toLocaleString('ru-RU')} ֏
+                          {record.liters ? `, ${record.liters.toFixed(1)} л` : ''}
+                          {record.mileage ? `, ${record.mileage} км` : ''}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleDelete(record.id)}
+                        className={`p-1 rounded-full hover:bg-slate-700 active:scale-90 transition-all ${
+                          deleteConfirm === record.id ? 'text-red-400' : 'text-slate-400'
+                        }`}
+                        title={deleteConfirm === record.id ? 'Нажмите ещё раз для подтверждения' : 'Удалить'}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ))}
+              </div>
+            </section>
+          </>
+        )}
       </div>
     </div>
   );
