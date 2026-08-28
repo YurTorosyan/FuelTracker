@@ -10,7 +10,14 @@ import AddRefuelModal from './components/AddRefuelModal';
 import AnalyticsModal from './components/AnalyticsModal';
 import StationManagerModal from './components/StationManagerModal';
 import { Plus } from 'lucide-react';
-import { getPreviousPropaneRecord, calcConsumptionForRecord } from './utils/calculations';
+
+// Функция для форматирования даты в YYYY-MM-DD без сдвига UTC
+const formatDateForInput = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 function App() {
   const [user, setUser] = useState(null);
@@ -23,9 +30,9 @@ function App() {
   const [stations, setStations] = useState([]);
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  // Теперь selectedDate хранит строку в формате YYYY-MM-DD
+  const [selectedDate, setSelectedDate] = useState(formatDateForInput(new Date()));
 
-  // Отслеживание состояния аутентификации
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setUser(user);
@@ -34,7 +41,6 @@ function App() {
     return () => unsubscribe();
   }, []);
 
-  // Загрузка записей и станций при наличии пользователя
   useEffect(() => {
     if (!user) {
       setRecords([]);
@@ -76,16 +82,6 @@ function App() {
     };
   }, [user, currentMonth, currentYear]);
 
-  // Обогащение записей данными о расходе
-  const enrichedRecords = records.map(record => {
-    if (record.type === 'propane' && record.isTankEmpty) {
-      const prevPropane = getPreviousPropaneRecord(records, record);
-      const { consumption, costPerKm } = calcConsumptionForRecord(record, prevPropane);
-      return { ...record, consumption, costPerKm };
-    }
-    return { ...record, consumption: null, costPerKm: null };
-  });
-
   const handlePrevMonth = () => {
     if (currentMonth === 0) {
       setCurrentMonth(11);
@@ -105,22 +101,20 @@ function App() {
   };
 
   const handleDayClick = (day) => {
-    setSelectedDate(new Date(currentYear, currentMonth, day));
+    const dateObj = new Date(currentYear, currentMonth, day);
+    setSelectedDate(formatDateForInput(dateObj));
     setShowAddModal(true);
   };
 
-  // Функция удаления записи (используется в Calendar и AnalyticsModal)
   const handleDeleteRecord = async (recordId) => {
     if (!user) return;
     try {
       await deleteDoc(doc(db, 'users', user.uid, 'logs', recordId));
-      // Обновление произойдёт автоматически через onSnapshot
     } catch (error) {
       console.error('Ошибка удаления записи:', error);
     }
   };
 
-  // Функция удаления станции (АЗС)
   const handleDeleteStation = async (stationId) => {
     if (!user) return;
     try {
@@ -148,7 +142,7 @@ function App() {
             <Calendar
               month={currentMonth}
               year={currentYear}
-              records={enrichedRecords}
+              records={records}
               onPrevMonth={handlePrevMonth}
               onNextMonth={handleNextMonth}
               onDayClick={handleDayClick}
@@ -156,14 +150,13 @@ function App() {
             />
 
             <Dashboard
-              records={enrichedRecords}
+              records={records}
               onOpenAnalytics={() => setShowAnalytics(true)}
             />
 
-            {/* Плавающая кнопка добавления */}
             <button
               onClick={() => {
-                setSelectedDate(new Date());
+                setSelectedDate(formatDateForInput(new Date()));
                 setShowAddModal(true);
               }}
               className="fixed bottom-6 left-1/2 -translate-x-1/2 w-14 h-14 bg-emerald-500 hover:bg-emerald-600 rounded-full flex items-center justify-center shadow-lg shadow-emerald-500/30 transition-all z-40"
@@ -186,7 +179,6 @@ function App() {
         )}
       </div>
 
-      {/* Модальные окна */}
       {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
       {showAddModal && user && (
         <AddRefuelModal
@@ -199,7 +191,7 @@ function App() {
       )}
       {showAnalytics && user && (
         <AnalyticsModal
-          records={enrichedRecords}
+          records={records}
           onClose={() => setShowAnalytics(false)}
           onDeleteRecord={handleDeleteRecord}
         />

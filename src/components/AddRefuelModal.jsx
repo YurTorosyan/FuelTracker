@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X, Plus, Fuel } from 'lucide-react';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, Timestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import { calcLiters } from '../utils/calculations';
 
@@ -11,7 +11,8 @@ const AddRefuelModal = ({ user, stations, defaultDate, onClose, onOpenStationMan
   const [mileage, setMileage] = useState('');
   const [sum, setSum] = useState('');
   const [pricePerLiter, setPricePerLiter] = useState('');
-  const [date, setDate] = useState(defaultDate || new Date());
+  // Теперь дата хранится в виде строки YYYY-MM-DD
+  const [date, setDate] = useState(defaultDate || '');
   const [notification, setNotification] = useState('');
 
   useEffect(() => {
@@ -27,11 +28,21 @@ const AddRefuelModal = ({ user, stations, defaultDate, onClose, onOpenStationMan
     const sumNum = parseFloat(sum);
     if (isNaN(sumNum)) return;
 
+    // Проверяем, что дата задана
+    if (!date) {
+      alert('Выберите дату');
+      return;
+    }
+
+    // Преобразуем строку YYYY-MM-DD в объект Date с локальным временем начала дня
+    const [year, month, day] = date.split('-').map(Number);
+    const dateObj = new Date(year, month - 1, day); // локальное время 00:00
+
     try {
       const record = {
         type: fuelType,
         sum: sumNum,
-        date: date instanceof Date ? serverTimestamp() : date, // если передали Timestamp, не перезаписываем
+        date: Timestamp.fromDate(dateObj),
       };
 
       if (fuelType === 'propane') {
@@ -67,13 +78,8 @@ const AddRefuelModal = ({ user, stations, defaultDate, onClose, onOpenStationMan
       }, 1500);
     } catch (error) {
       console.error('Ошибка добавления записи:', error);
+      alert('Не удалось сохранить заправку. Проверьте консоль.');
     }
-  };
-
-  const formatDateForInput = (date) => {
-    if (!date) return '';
-    const d = date instanceof Date ? date : date.toDate();
-    return d.toISOString().split('T')[0];
   };
 
   return (
@@ -101,14 +107,15 @@ const AddRefuelModal = ({ user, stations, defaultDate, onClose, onOpenStationMan
         </div>
 
         <form onSubmit={handleSubmit}>
-          {/* Выбор даты */}
+          {/* Поле даты */}
           <div className="mb-3">
             <label className="block text-sm text-slate-400 mb-1">Дата</label>
             <input
               type="date"
-              value={formatDateForInput(date)}
-              onChange={(e) => setDate(e.target.value ? new Date(e.target.value) : new Date())}
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
               className="w-full bg-slate-700 text-slate-100 rounded-xl px-3 py-2 outline-none"
+              required
             />
           </div>
 

@@ -1,11 +1,10 @@
 import { useMemo, useState } from 'react';
 import { X, Trash2, Award, TrendingDown, TrendingUp, Fuel } from 'lucide-react';
-import { db, auth } from '../firebase'; // добавлен auth
-import { collection, deleteDoc, doc } from 'firebase/firestore';
+import { db, auth } from '../firebase';
+import { deleteDoc, doc } from 'firebase/firestore';
+import { computeStationStats } from '../utils/calculations';
 
-// ... остальной код без изменений
-
-const AnalyticsModal = ({ records, onClose }) => {
+const AnalyticsModal = ({ records, onClose, onDeleteRecord }) => {
   const [deleteConfirm, setDeleteConfirm] = useState(null);
 
   const propaneRecords = records.filter(r => r.type === 'propane');
@@ -29,48 +28,22 @@ const AnalyticsModal = ({ records, onClose }) => {
     return totalDays / (sorted.length - 1);
   }, [records]);
 
-  // Статистика по АЗС (только пропан)
-  const stationStats = useMemo(() => {
-    const stats = {};
-    propaneRecords.forEach(record => {
-      if (!record.station) return;
-      if (!stats[record.station]) {
-        stats[record.station] = {
-          visits: 0,
-          totalLiters: 0,
-          totalSum: 0,
-          consumptions: [],
-          costPerKm: [],
-        };
-      }
-      const s = stats[record.station];
-      s.visits += 1;
-      s.totalLiters += record.liters || 0;
-      s.totalSum += record.sum;
-      if (record.consumption != null) {
-        s.consumptions.push(record.consumption);
-        s.costPerKm.push(record.costPerKm);
-      }
-    });
+  // Используем новую функцию для статистики по АЗС
+  const stationStats = useMemo(() => computeStationStats(records), [records]);
 
-    return Object.entries(stats).map(([name, data]) => ({
-      name,
-      visits: data.visits,
-      totalLiters: data.totalLiters,
-      totalSum: data.totalSum,
-      avgConsumption: data.consumptions.length ? data.consumptions.reduce((a,b)=>a+b,0)/data.consumptions.length : null,
-      avgCostPerKm: data.costPerKm.length ? data.costPerKm.reduce((a,b)=>a+b,0)/data.costPerKm.length : null,
-    }));
-  }, [propaneRecords]);
-
-  const bestStation = stationStats.filter(s => s.avgConsumption != null).sort((a,b) => a.avgConsumption - b.avgConsumption)[0];
-  const worstStation = stationStats.filter(s => s.avgConsumption != null).sort((a,b) => b.avgConsumption - a.avgConsumption)[0];
+  const bestStation = stationStats
+    .filter(s => s.avgConsumption != null)
+    .sort((a, b) => a.avgConsumption - b.avgConsumption)[0];
+  const worstStation = stationStats
+    .filter(s => s.avgConsumption != null)
+    .sort((a, b) => b.avgConsumption - a.avgConsumption)[0];
 
   const handleDelete = async (id) => {
     if (deleteConfirm === id) {
       try {
         await deleteDoc(doc(db, 'users', auth.currentUser.uid, 'logs', id));
         setDeleteConfirm(null);
+        if (onDeleteRecord) onDeleteRecord(id);
       } catch (error) {
         console.error('Ошибка удаления:', error);
       }
@@ -137,7 +110,9 @@ const AnalyticsModal = ({ records, onClose }) => {
               <Award className="text-emerald-400" size={24} />
               <div>
                 <div className="font-medium text-emerald-300">Лучшая АЗС: {bestStation.name}</div>
-                <div className="text-sm text-emerald-200">Расход {bestStation.avgConsumption.toFixed(2)} л/100км, {bestStation.avgCostPerKm.toFixed(2)} ֏/км</div>
+                <div className="text-sm text-emerald-200">
+                  Расход {bestStation.avgConsumption.toFixed(2)} л/100км, {bestStation.avgCostPerKm.toFixed(2)} ֏/км
+                </div>
               </div>
             </div>
           )}
@@ -146,7 +121,9 @@ const AnalyticsModal = ({ records, onClose }) => {
               <TrendingDown className="text-red-400" size={24} />
               <div>
                 <div className="font-medium text-red-300">Худшая АЗС: {worstStation.name}</div>
-                <div className="text-sm text-red-200">Расход {worstStation.avgConsumption.toFixed(2)} л/100км, {worstStation.avgCostPerKm.toFixed(2)} ֏/км</div>
+                <div className="text-sm text-red-200">
+                  Расход {worstStation.avgConsumption.toFixed(2)} л/100км, {worstStation.avgCostPerKm.toFixed(2)} ֏/км
+                </div>
               </div>
             </div>
           )}

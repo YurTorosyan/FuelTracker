@@ -1,4 +1,5 @@
 import { Fuel } from 'lucide-react';
+import { computeOverallStats } from '../utils/calculations';
 
 const Dashboard = ({ records, onOpenAnalytics }) => {
   const propaneRecords = records.filter(r => r.type === 'propane');
@@ -7,23 +8,10 @@ const Dashboard = ({ records, onOpenAnalytics }) => {
   const propaneTotal = propaneRecords.reduce((s, r) => s + r.sum, 0);
   const petrolTotal = petrolRecords.reduce((s, r) => s + r.sum, 0);
 
-  // Средний расход и стоимость 1 км (только по записям с вычисленным расходом)
-  const consumptionValues = propaneRecords
-    .filter(r => r.consumption != null)
-    .map(r => r.consumption);
-  const costPerKmValues = propaneRecords
-    .filter(r => r.costPerKm != null)
-    .map(r => r.costPerKm);
-  const totalKmPropane = propaneRecords
-    .filter(r => r.mileage)
-    .reduce((s, r) => s + r.mileage, 0);
+  const { totalMileage, avgConsumption, avgCostPerKm } = computeOverallStats(records);
 
-  const avgConsumption = consumptionValues.length
-    ? (consumptionValues.reduce((a, b) => a + b, 0) / consumptionValues.length).toFixed(2)
-    : '—';
-  const avgCostPerKm = costPerKmValues.length
-    ? (costPerKmValues.reduce((a, b) => a + b, 0) / costPerKmValues.length).toFixed(2)
-    : '—';
+  const avgConsumptionDisplay = avgConsumption ? avgConsumption.toFixed(2) : '—';
+  const avgCostPerKmDisplay = avgCostPerKm ? avgCostPerKm.toFixed(2) : '—';
 
   return (
     <div
@@ -47,15 +35,15 @@ const Dashboard = ({ records, onOpenAnalytics }) => {
       <div className="mt-4 space-y-2">
         <div className="flex justify-between">
           <span className="text-slate-400">Средний расход газа</span>
-          <span className="font-medium text-slate-200">{avgConsumption} л/100 км</span>
+          <span className="font-medium text-slate-200">{avgConsumptionDisplay} л/100 км</span>
         </div>
         <div className="flex justify-between">
           <span className="text-slate-400">Стоимость 1 км на газе</span>
-          <span className="font-medium text-slate-200">{avgCostPerKm} ֏/км</span>
+          <span className="font-medium text-slate-200">{avgCostPerKmDisplay} ֏/км</span>
         </div>
         <div className="flex justify-between">
           <span className="text-slate-400">Всего км на газе</span>
-          <span className="font-medium text-slate-200">{totalKmPropane} км</span>
+          <span className="font-medium text-slate-200">{totalMileage} км</span>
         </div>
       </div>
     </div>
