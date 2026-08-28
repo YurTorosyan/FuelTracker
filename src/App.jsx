@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, query, where, onSnapshot, orderBy, deleteDoc, doc } from 'firebase/firestore';
 import { auth, db } from './firebase';
@@ -30,10 +30,10 @@ function App() {
   const [selectedDate, setSelectedDate] = useState(formatDateForInput(new Date()));
   const [toast, setToast] = useState(null);
 
-  const showToast = (message, type = 'error') => {
+  const showToast = useCallback((message, type = 'error') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
-  };
+  }, []);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -43,6 +43,7 @@ function App() {
     return () => unsubscribe();
   }, []);
 
+  // Загрузка записей и станций через подписки с отпиской
   useEffect(() => {
     if (!user) {
       setRecords([]);
@@ -65,7 +66,7 @@ function App() {
       orderBy('date', 'desc')
     );
 
-    const unsubLogs = onSnapshot(logsQuery, (snapshot) => {
+    const unsubscribeLogs = onSnapshot(logsQuery, (snapshot) => {
       const docs = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
@@ -80,7 +81,7 @@ function App() {
     });
 
     const stationsQuery = query(collection(db, 'users', user.uid, 'stations'));
-    const unsubStations = onSnapshot(stationsQuery, (snapshot) => {
+    const unsubscribeStations = onSnapshot(stationsQuery, (snapshot) => {
       setStations(snapshot.docs.map(doc => ({ id: doc.id, name: doc.data().name })));
       setLoadingStations(false);
     }, (error) => {
@@ -90,36 +91,28 @@ function App() {
     });
 
     return () => {
-      unsubLogs();
-      unsubStations();
+      unsubscribeLogs();
+      unsubscribeStations();
     };
-  }, [user, currentMonth, currentYear]);
+  }, [user, currentMonth, currentYear, showToast]);
 
-  const handlePrevMonth = () => {
-    if (currentMonth === 0) {
-      setCurrentMonth(11);
-      setCurrentYear(currentYear - 1);
-    } else {
-      setCurrentMonth(currentMonth - 1);
-    }
-  };
+  const handlePrevMonth = useCallback(() => {
+    setCurrentMonth(prev => prev === 0 ? 11 : prev - 1);
+    setCurrentYear(prev => currentMonth === 0 ? prev - 1 : prev);
+  }, [currentMonth]);
 
-  const handleNextMonth = () => {
-    if (currentMonth === 11) {
-      setCurrentMonth(0);
-      setCurrentYear(currentYear + 1);
-    } else {
-      setCurrentMonth(currentMonth + 1);
-    }
-  };
+  const handleNextMonth = useCallback(() => {
+    setCurrentMonth(prev => prev === 11 ? 0 : prev + 1);
+    setCurrentYear(prev => currentMonth === 11 ? prev + 1 : prev);
+  }, [currentMonth]);
 
-  const handleDayClick = (day) => {
+  const handleDayClick = useCallback((day) => {
     const dateObj = new Date(currentYear, currentMonth, day);
     setSelectedDate(formatDateForInput(dateObj));
     setShowAddModal(true);
-  };
+  }, [currentYear, currentMonth]);
 
-  const handleDeleteRecord = async (recordId) => {
+  const handleDeleteRecord = useCallback(async (recordId) => {
     if (!user) return;
     try {
       await deleteDoc(doc(db, 'users', user.uid, 'logs', recordId));
@@ -128,9 +121,9 @@ function App() {
       console.error('Ошибка удаления записи:', error);
       showToast('Не удалось удалить запись', 'error');
     }
-  };
+  }, [user, showToast]);
 
-  const handleDeleteStation = async (stationId) => {
+  const handleDeleteStation = useCallback(async (stationId) => {
     if (!user) return;
     try {
       await deleteDoc(doc(db, 'users', user.uid, 'stations', stationId));
@@ -139,7 +132,10 @@ function App() {
       console.error('Ошибка удаления АЗС:', error);
       showToast('Не удалось удалить АЗС', 'error');
     }
-  };
+  }, [user, showToast]);
+
+  // Мемоизация станций для передачи в AddRefuelModal
+  const stationNames = useMemo(() => stations, [stations]);
 
   if (authLoading) {
     return (
@@ -150,7 +146,7 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-950 to-slate-900 text-slate-100 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-950 text-slate-100 flex items-center justify-center p-4">
       <div className="w-full max-w-[480px] space-y-4 pb-20">
         <Header user={user} onAuthClick={() => setShowAuthModal(true)} />
 
@@ -210,7 +206,7 @@ function App() {
       {showAddModal && user && (
         <AddRefuelModal
           user={user}
-          stations={stations}
+          stations={stationNames}
           defaultDate={selectedDate}
           onClose={() => setShowAddModal(false)}
           onOpenStationManager={() => setShowStationManager(true)}
@@ -228,7 +224,7 @@ function App() {
       {showStationManager && user && (
         <StationManagerModal
           user={user}
-          stations={stations}
+          stations={stationNames}
           onDeleteStation={handleDeleteStation}
           onClose={() => setShowStationManager(false)}
           showToast={showToast}

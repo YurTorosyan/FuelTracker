@@ -1,14 +1,16 @@
+import { useMemo } from 'react';
 import { Fuel } from 'lucide-react';
 import { computeOverallStats } from '../utils/calculations';
 
 const Dashboard = ({ records, onOpenAnalytics }) => {
-  const propaneRecords = records.filter(r => r.type === 'propane');
-  const petrolRecords = records.filter(r => r.type === 'petrol');
+  const stats = useMemo(() => computeOverallStats(records), [records]);
+  const propaneRecords = useMemo(() => records.filter(r => r.type === 'propane'), [records]);
+  const petrolRecords = useMemo(() => records.filter(r => r.type === 'petrol'), [records]);
 
-  const propaneTotal = propaneRecords.reduce((s, r) => s + r.sum, 0);
-  const petrolTotal = petrolRecords.reduce((s, r) => s + r.sum, 0);
+  const propaneTotal = useMemo(() => propaneRecords.reduce((s, r) => s + r.sum, 0), [propaneRecords]);
+  const petrolTotal = useMemo(() => petrolRecords.reduce((s, r) => s + r.sum, 0), [petrolRecords]);
 
-  const { totalMileage, avgConsumption, avgCostPerKm } = computeOverallStats(records);
+  const { totalMileage, avgConsumption, avgCostPerKm } = stats;
 
   const avgConsumptionDisplay = avgConsumption ? avgConsumption.toFixed(2) : '—';
   const avgCostPerKmDisplay = avgCostPerKm ? avgCostPerKm.toFixed(2) : '—';
@@ -16,7 +18,7 @@ const Dashboard = ({ records, onOpenAnalytics }) => {
   return (
     <div
       onClick={onOpenAnalytics}
-      className="bg-slate-800/80 backdrop-blur-md rounded-2xl p-5 shadow-lg cursor-pointer border border-white/10 hover:border-emerald-500/40 hover:shadow-emerald-500/10 transition-all active:scale-[0.98] slide-up"
+      className="bg-slate-800 rounded-2xl p-5 shadow-md cursor-pointer border border-white/10 hover:border-emerald-500/40 transition-colors duration-150 active:scale-[0.98] slide-up"
     >
       <div className="flex justify-between items-start mb-4">
         <h2 className="text-xl font-bold text-slate-100">Расходы за месяц</h2>

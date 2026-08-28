@@ -9,3 +9,10 @@ export const parseInputDate = (dateStr) => {
   const [year, month, day] = dateStr.split('-').map(Number);
   return new Date(year, month - 1, day);
 };
+
+// Новая функция для отображения даты в формате ДД.ММ.ГГГГ
+export const formatDateForDisplay = (dateStr) => {
+  if (!dateStr) return '';
+  const [year, month, day] = dateStr.split('-');
+  return `${day}.${month}.${year}`;
+};

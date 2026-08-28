@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useCallback } from 'react';
 import { X, Trash2, Award, TrendingDown, TrendingUp, Fuel } from 'lucide-react';
 import { db, auth } from '../firebase';
 import { deleteDoc, doc } from 'firebase/firestore';
@@ -9,7 +9,6 @@ const AnalyticsModal = ({ records, onClose, onDeleteRecord, showToast }) => {
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Блокировка скролла заднего фона
   useEffect(() => {
     document.body.style.overflow = 'hidden';
     return () => {
@@ -17,11 +16,11 @@ const AnalyticsModal = ({ records, onClose, onDeleteRecord, showToast }) => {
     };
   }, []);
 
-  const propaneRecords = records.filter(r => r.type === 'propane');
-  const petrolRecords = records.filter(r => r.type === 'petrol');
+  const propaneRecords = useMemo(() => records.filter(r => r.type === 'propane'), [records]);
+  const petrolRecords = useMemo(() => records.filter(r => r.type === 'petrol'), [records]);
 
-  const totalPropane = propaneRecords.reduce((sum, r) => sum + r.sum, 0);
-  const totalPetrol = petrolRecords.reduce((sum, r) => sum + r.sum, 0);
+  const totalPropane = useMemo(() => propaneRecords.reduce((sum, r) => sum + r.sum, 0), [propaneRecords]);
+  const totalPetrol = useMemo(() => petrolRecords.reduce((sum, r) => sum + r.sum, 0), [petrolRecords]);
   const totalExpenses = totalPropane + totalPetrol;
   const propanePercent = totalExpenses > 0 ? (totalPropane / totalExpenses * 100) : 0;
   const petrolPercent = totalExpenses > 0 ? (totalPetrol / totalExpenses * 100) : 0;
@@ -40,14 +39,15 @@ const AnalyticsModal = ({ records, onClose, onDeleteRecord, showToast }) => {
 
   const stationStats = useMemo(() => computeStationStats(records), [records]);
 
-  const bestStation = stationStats
-    .filter(s => s.avgConsumption != null)
-    .sort((a, b) => a.avgConsumption - b.avgConsumption)[0];
-  const worstStation = stationStats
-    .filter(s => s.avgConsumption != null)
-    .sort((a, b) => b.avgConsumption - a.avgConsumption)[0];
+  const stationsWithConsumption = useMemo(() => stationStats.filter(s => s.avgConsumption != null), [stationStats]);
+  const bestStation = stationsWithConsumption.length > 0
+    ? stationsWithConsumption.sort((a, b) => a.avgConsumption - b.avgConsumption)[0]
+    : null;
+  const worstStation = stationsWithConsumption.length >= 2
+    ? stationsWithConsumption.sort((a, b) => b.avgConsumption - a.avgConsumption)[0]
+    : null;
 
-  const handleDelete = async (id) => {
+  const handleDelete = useCallback(async (id) => {
     if (deleteConfirm === id) {
       try {
         setIsLoading(true);
@@ -65,17 +65,17 @@ const AnalyticsModal = ({ records, onClose, onDeleteRecord, showToast }) => {
       setDeleteConfirm(id);
       setTimeout(() => setDeleteConfirm(null), 3000);
     }
-  };
+  }, [deleteConfirm, onDeleteRecord, showToast]);
 
-  const formatDate = (timestamp) => {
+  const formatDate = useCallback((timestamp) => {
     const date = timestamp.toDate();
     return date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
-  };
+  }, []);
 
   if (isLoading) {
     return (
-      <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4">
-        <div className="w-full max-w-md rounded-t-3xl sm:rounded-2xl bg-slate-800 border-t sm:border border-slate-700/80 p-5 shadow-2xl max-h-[90vh] overflow-y-auto animate-in slide-in-from-bottom duration-200">
+      <div className="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center sm:p-4">
+        <div className="w-full max-w-md rounded-t-3xl sm:rounded-2xl bg-slate-800 border-t sm:border border-slate-700/80 p-5 sm:p-6 shadow-lg max-h-[85vh] overflow-y-auto overflow-x-hidden overscroll-contain animate-in slide-in-from-bottom duration-200">
           <AnalyticsSkeleton />
         </div>
       </div>
@@ -83,12 +83,10 @@ const AnalyticsModal = ({ records, onClose, onDeleteRecord, showToast }) => {
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4">
-      <div className="w-full max-w-md rounded-t-3xl sm:rounded-2xl bg-slate-800 border-t sm:border border-slate-700/80 p-5 shadow-2xl max-h-[90vh] overflow-y-auto animate-in slide-in-from-bottom duration-200 relative">
-        {/* Полоска-индикатор */}
+    <div className="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center sm:p-4">
+      <div className="w-full max-w-md rounded-t-3xl sm:rounded-2xl bg-slate-800 border-t sm:border border-slate-700/80 p-5 sm:p-6 shadow-lg max-h-[85vh] overflow-y-auto overflow-x-hidden overscroll-contain animate-in slide-in-from-bottom duration-200 relative">
         <div className="w-12 h-1.5 bg-slate-600 rounded-full mx-auto mb-4 opacity-60" />
-
-        <button onClick={onClose} className="absolute top-4 right-4 p-1 rounded-full hover:bg-slate-700 active:scale-90 transition-all">
+        <button onClick={onClose} className="absolute top-4 right-4 p-1 rounded-full hover:bg-slate-700 active:scale-90 transition-colors duration-150">
           <X size={20} className="text-slate-300" />
         </button>
 
@@ -223,7 +221,7 @@ const AnalyticsModal = ({ records, onClose, onDeleteRecord, showToast }) => {
                       </div>
                       <button
                         onClick={() => handleDelete(record.id)}
-                        className={`p-1 rounded-full hover:bg-slate-700 active:scale-90 transition-all ${
+                        className={`p-1 rounded-full hover:bg-slate-700 active:scale-90 transition-colors duration-150 ${
                           deleteConfirm === record.id ? 'text-red-400' : 'text-slate-400'
                         }`}
                         title={deleteConfirm === record.id ? 'Нажмите ещё раз для подтверждения' : 'Удалить'}
